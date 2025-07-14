@@ -54,17 +54,26 @@ def start_iperf_competing(net):
 
     print("Starting competing iperf flows (Reno x BBR)...")
 
-    # Dois servidores iperf, em portas diferentes
+    # Dois servidores iperf no h2
     h2.popen("iperf -s -p 5001 -w 16m")
     h2.popen("iperf -s -p 5002 -w 16m")
 
     # Fluxo Reno (porta 5001)
     h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
-    h1.popen(f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1", shell=True)
+    with open(f"{args.dir}/reno_iperf.txt", "w") as f:
+        reno_proc = h1.popen(
+            f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1", shell=True, stdout=f
+        )
+        reno_proc.wait()
 
     # Fluxo BBR (porta 5002)
     h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
-    h1.popen(f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1", shell=True)
+    with open(f"{args.dir}/bbr_iperf.txt", "w") as f:
+        bbr_proc = h1.popen(
+            f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1", shell=True, stdout=f
+        )
+        bbr_proc.wait()
+
 
 def start_qmon(iface, interval_sec=0.1, outfile="q.txt"):
     monitor = Process(target=monitor_qlen, args=(iface, interval_sec, outfile))
