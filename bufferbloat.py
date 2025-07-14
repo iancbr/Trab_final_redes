@@ -41,36 +41,36 @@ class BBTopo(Topo):
         self.addLink(h1, switch, bw=args.bw_host, delay='1ms', max_queue_size=args.maxq, use_htb=True)
         self.addLink(switch, h2, bw=args.bw_net, delay=f'{args.delay}ms', max_queue_size=args.maxq, use_htb=True)
 
-def start_iperf3(net):
+def start_iperf(net):
     h1 = net.get('h1')
     h2 = net.get('h2')
-    print("Starting iperf3 server...")
-    server = h2.popen("iperf3 -s -w 16m")
-    client = h1.popen(f"iperf3 -c {h2.IP()} -t {args.time} -i 1")
+    print("Starting iperf server...")
+    server = h2.popen("iperf -s -w 16m")
+    client = h1.popen(f"iperf -c {h2.IP()} -t {args.time} -i 1")
 
-def start_iperf3_competing(net):
+def start_iperf_competing(net):
     h1 = net.get('h1')
     h2 = net.get('h2')
 
-    print("Starting competing iperf3 flows (Reno x BBR)...")
+    print("Starting competing iperf flows (Reno x BBR)...")
 
-    # Dois servidores iperf3 no h2
-    h2.popen("iperf3 -s -p 5001 -w 16m")
-    h2.popen("iperf3 -s -p 5002 -w 16m")
+    # Dois servidores iperf no h2
+    h2.popen("iperf -s -p 5001 -w 16m")
+    h2.popen("iperf -s -p 5002 -w 16m")
 
     # Fluxo Reno (porta 5001)
     h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
-    with open(f"{args.dir}/reno_iperf3.txt", "w") as f:
+    with open(f"{args.dir}/reno_iperf.txt", "w") as f:
         reno_proc = h1.popen(
-            f"iperf3 -c {h2.IP()} -p 5001 -t {args.time} -i 1", shell=True, stdout=f, stderr=f
+            f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1 -y C", shell=True, stdout=f 
         )
         reno_proc.wait()
 
     # Fluxo BBR (porta 5002)
     h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
-    with open(f"{args.dir}/bbr_iperf3.txt", "w") as f:
+    with open(f"{args.dir}/bbr_iperf.txt", "w") as f:
         bbr_proc = h1.popen(
-            f"iperf3 -c {h2.IP()} -p 5002 -t {args.time} -i 1", shell=True, stdout=f, stderr=f
+            f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1 -y C", shell=True, stdout=f 
         )
         bbr_proc.wait()
 
@@ -120,10 +120,10 @@ def bufferbloat():
     qmon = start_qmon(iface='s0-eth2', outfile=f'{args.dir}/q.txt')
 
     if args.compete:
-        start_iperf3_competing(net)
+        start_iperf_competing(net)
     else:
         os.system(f"sysctl -w net.ipv4.tcp_congestion_control={args.cong}")
-        start_iperf3(net)
+        start_iperf(net)
 
     start_ping(net)
     start_webserver(net)
