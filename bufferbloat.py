@@ -1,5 +1,3 @@
-
-
 from mininet.topo import Topo
 from mininet.node import CPULimitedHost
 from mininet.link import TCLink
@@ -27,6 +25,7 @@ parser.add_argument('--dir', '-d', help="Directory to store outputs", required=T
 parser.add_argument('--time', '-t', help="Duration (sec) to run the experiment", type=int, default=10)
 parser.add_argument('--maxq', type=int, help="Max buffer size of network interface in packets", default=100)
 parser.add_argument('--cong', help="Congestion control algorithm to use", default="reno")
+parser.add_argument('--compete', action='store_true', help="Run competition experiment between Reno and BBR flows")
 
 args = parser.parse_args()
 
@@ -48,6 +47,24 @@ def start_iperf(net):
     print("Starting iperf server...")
     server = h2.popen("iperf -s -w 16m")
     client = h1.popen(f"iperf -c {h2.IP()} -t {args.time} -i 1")
+
+def start_iperf_competing(net):
+    h1 = net.get('h1')
+    h2 = net.get('h2')
+
+    print("Starting competing iperf flows (Reno x BBR)...")
+
+    # Dois servidores iperf, em portas diferentes
+    h2.popen("iperf -s -p 5001 -w 16m")
+    h2.popen("iperf -s -p 5002 -w 16m")
+
+    # Fluxo Reno (porta 5001)
+    h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
+    h1.popen(f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1", shell=True)
+
+    # Fluxo BBR (porta 5002)
+    h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
+    h1.popen(f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1", shell=True)
 
 def start_qmon(iface, interval_sec=0.1, outfile="q.txt"):
     monitor = Process(target=monitor_qlen, args=(iface, interval_sec, outfile))
@@ -76,14 +93,14 @@ def measure_web_download(net):
         time_taken = float(result.stdout.read().strip())
         download_times.append(time_taken)
         elapsed = time() - start_time
-        sleep_time = max(0, 5 - elapsed)  # Garante que sleep seja não-negativo
+        sleep_time = max(0, 5 - elapsed)
         sleep(sleep_time)
     return download_times
 
 def bufferbloat():
     if not os.path.exists(args.dir):
         os.makedirs(args.dir)
-    os.system(f"sysctl -w net.ipv4.tcp_congestion_control={args.cong}")
+
     topo = BBTopo()
     net = Mininet(topo=topo, host=CPULimitedHost, link=TCLink)
     net.start()
@@ -92,7 +109,13 @@ def bufferbloat():
     net.pingAll()
 
     qmon = start_qmon(iface='s0-eth2', outfile=f'{args.dir}/q.txt')
-    start_iperf(net)
+
+    if args.compete:
+        start_iperf_competing(net)
+    else:
+        os.system(f"sysctl -w net.ipv4.tcp_congestion_control={args.cong}")
+        start_iperf(net)
+
     start_ping(net)
     start_webserver(net)
 
