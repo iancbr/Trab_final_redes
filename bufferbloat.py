@@ -62,7 +62,7 @@ def start_iperf_competing(net):
     h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
     with open(f"{args.dir}/reno_iperf.txt", "w") as f:
         reno_proc = h1.popen(
-            f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1 -v", shell=True, stdout=f
+            f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1 -v", shell=True, stdout=f, stderr=f
         )
         reno_proc.wait()
 
@@ -70,7 +70,7 @@ def start_iperf_competing(net):
     h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
     with open(f"{args.dir}/bbr_iperf.txt", "w") as f:
         bbr_proc = h1.popen(
-            f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1 -v", shell=True, stdout=f
+            f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1 -v", shell=True, stdout=f, stderr=f
         )
         bbr_proc.wait()
 
