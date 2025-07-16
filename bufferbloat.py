@@ -26,6 +26,8 @@ parser.add_argument('--time', '-t', help="Duration (sec) to run the experiment",
 parser.add_argument('--maxq', type=int, help="Max buffer size of network interface in packets", default=100)
 parser.add_argument('--cong', help="Congestion control algorithm to use", default="reno")
 parser.add_argument('--compete', action='store_true', help="Run competition experiment between Reno and BBR flows")
+parser.add_argument('--reno-flows', type=int, default=1, help="Number of Reno flows in competition mode")
+parser.add_argument('--bbr-flows', type=int, default=1, help="Number of BBR flows in competition mode")
 
 args = parser.parse_args()
 
@@ -38,8 +40,10 @@ class BBTopo(Topo):
         switch = self.addSwitch('s0')
 
         # Links
-        self.addLink(h1, switch, bw=args.bw_host, delay='1ms', max_queue_size=args.maxq, use_htb=True)
-        self.addLink(switch, h2, bw=args.bw_net, delay=f'{args.delay}ms', max_queue_size=args.maxq, use_htb=True)
+        self.addLink(h1, switch, bw=args.bw_host, delay='1ms',
+                     max_queue_size=args.maxq, use_htb=True)
+        self.addLink(switch, h2, bw=args.bw_net, delay=f'{args.delay}ms',
+                     max_queue_size=args.maxq, use_htb=True)
 
 def start_iperf(net):
     h1 = net.get('h1')
@@ -52,28 +56,42 @@ def start_iperf_competing(net):
     h1 = net.get('h1')
     h2 = net.get('h2')
 
-    print("Starting competing iperf flows (Reno x BBR)...")
+    print("Starting competing iperf flows...")
 
-    # Dois servidores iperf no h2
-    h2.popen("iperf -s -p 5001 -w 16m")
-    h2.popen("iperf -s -p 5002 -w 16m")
+    # Start iperf servers on h2
+    # Servers for Reno flows
+    for i in range(args.reno_flows):
+        port = 5001 + i * 2
+        h2.popen(f"iperf -s -p {port} -w 16m")
 
-    # Fluxo Reno (porta 5001)
-    h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
-    with open(f"{args.dir}/reno_iperf.txt", "w") as f:
-        reno_proc = h1.popen(
-            f"iperf -c {h2.IP()} -p 5001 -t {args.time} -i 1 -e", shell=True, stdout=f 
-        )
-        reno_proc.wait()
+    # Servers for BBR flows
+    for i in range(args.bbr_flows):
+        port = 5002 + i * 2
+        h2.popen(f"iperf -s -p {port} -w 16m")
 
-    # Fluxo BBR (porta 5002)
-    h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
-    with open(f"{args.dir}/bbr_iperf.txt", "w") as f:
-        bbr_proc = h1.popen(
-            f"iperf -c {h2.IP()} -p 5002 -t {args.time} -i 1 -e", shell=True, stdout=f 
-        )
-        bbr_proc.wait()
+    # Start Reno flows
+    for i in range(args.reno_flows):
+        port = 5001 + i * 2
+        h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
+        with open(f"{args.dir}/reno_iperf_{i}.txt", "w") as f:
+            proc = h1.popen(
+                f"iperf -c {h2.IP()} -p {port} -t {args.time} -i 1 -e",
+                shell=True,
+                stdout=f
+            )
+            proc.wait()
 
+    # Start BBR flows
+    for i in range(args.bbr_flows):
+        port = 5002 + i * 2
+        h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
+        with open(f"{args.dir}/bbr_iperf_{i}.txt", "w") as f:
+            proc = h1.popen(
+                f"iperf -c {h2.IP()} -p {port} -t {args.time} -i 1 -e",
+                shell=True,
+                stdout=f
+            )
+            proc.wait()
 
 def start_qmon(iface, interval_sec=0.1, outfile="q.txt"):
     monitor = Process(target=monitor_qlen, args=(iface, interval_sec, outfile))
@@ -96,7 +114,7 @@ def start_webserver(net):
 def measure_web_download(net):
     h2 = net.get('h2')
     download_times = []
-    for _ in range(3):  # Executa 3 vezes
+    for _ in range(3):
         start_time = time()
         result = h2.popen("curl -o /dev/null -s -w %{time_total} http://10.0.0.1/index.html", shell=True)
         time_taken = float(result.stdout.read().strip())
@@ -134,7 +152,7 @@ def bufferbloat():
     avg_time = sum(download_times) / len(download_times)
     std_dev = math.sqrt(sum([(x - avg_time) ** 2 for x in download_times]) / len(download_times))
     print(f"Average download time: {avg_time:.3f}s, Std Dev: {std_dev:.3f}s")
-    
+
     qmon.terminate()
 
     CLI(net)

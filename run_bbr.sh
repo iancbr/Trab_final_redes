@@ -1,33 +1,25 @@
 #!/bin/bash
 
-# Note: Mininet must be run as root. Invoke this shell script using sudo.
-
 time=90
 bwnet=1.5
-# Para obter um RTT de 20ms, cada link precisa ter um atraso de 10ms (ida e volta).
 delay=10
 
-iperf_port=5001
-
 for qsize in 20 100; do
-    dir=bb-q$qsize
+    data_dir=data_TCP_BBR_parte3/q$qsize
+    plots_dir=plots_TCP_BBR_parte3/q$qsize
 
-    # Cria o diretório de saída se ele ainda não existir.
-    mkdir -p $dir
+    mkdir -p $data_dir
+    mkdir -p $plots_dir
 
-    # Executa o bufferbloat.py com os parâmetros apropriados.
     python3 bufferbloat.py \
         --bw-host 1000 \
         --bw-net $bwnet \
         --delay $delay \
-        --dir $dir \
+        --dir $data_dir \
         --time $time \
         --maxq $qsize \
         --cong bbr
 
-
-    # Gera os gráficos usando os dados de saída.
-    
-    python3 plot_queue.py -f $dir/q.txt -o bbr-buffer-q$qsize.png
-    python3 plot_ping.py -f $dir/ping.txt -o bbr-rtt-q$qsize.png
+    python3 plot_queue.py -f $data_dir/q.txt -o $plots_dir/buffer.png
+    python3 plot_ping.py -f $data_dir/ping.txt -o $plots_dir/rtt.png
 done
