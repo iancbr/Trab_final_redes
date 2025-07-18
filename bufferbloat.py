@@ -58,40 +58,32 @@ def start_iperf_competing(net):
 
     print("Starting competing iperf flows...")
 
-    # Start iperf servers on h2
-    # Servers for Reno flows
-    for i in range(args.reno_flows):
-        port = 5001 + i * 2
-        h2.popen(f"iperf -s -p {port} -w 16m")
+    # RENO SERVER
+    h2.popen("iperf -s -p 5001 -w 16m")
 
-    # Servers for BBR flows
-    for i in range(args.bbr_flows):
-        port = 5002 + i * 2
-        h2.popen(f"iperf -s -p {port} -w 16m")
+    # BBR SERVER
+    h2.popen("iperf -s -p 5002 -w 16m")
 
-    # Start Reno flows
-    for i in range(args.reno_flows):
-        port = 5001 + i * 2
-        h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
-        with open(f"{args.dir}/reno_iperf_{i}.txt", "w") as f:
-            proc = h1.popen(
-                f"iperf -c {h2.IP()} -p {port} -t {args.time} -i 1 -e",
-                shell=True,
-                stdout=f
-            )
-            proc.wait()
+    # Inicia fluxo Reno com -P <n>
+    h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=reno")
+    with open(f"{args.dir}/reno_iperf.txt", "w") as f:
+        proc = h1.popen(
+            f"iperf -c {h2.IP()} -p 5001 -P {args.reno_flows} -t {args.time} -i 1 -e",
+            shell=True,
+            stdout=f
+        )
+        proc.wait()
 
-    # Start BBR flows
-    for i in range(args.bbr_flows):
-        port = 5002 + i * 2
-        h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
-        with open(f"{args.dir}/bbr_iperf_{i}.txt", "w") as f:
-            proc = h1.popen(
-                f"iperf -c {h2.IP()} -p {port} -t {args.time} -i 1 -e",
-                shell=True,
-                stdout=f
-            )
-            proc.wait()
+    # Inicia fluxo BBR com -P <n>
+    h1.cmd("sysctl -w net.ipv4.tcp_congestion_control=bbr")
+    with open(f"{args.dir}/bbr_iperf.txt", "w") as f:
+        proc = h1.popen(
+            f"iperf -c {h2.IP()} -p 5002 -P {args.bbr_flows} -t {args.time} -i 1 -e",
+            shell=True,
+            stdout=f
+        )
+        proc.wait()
+
 
 def start_qmon(iface, interval_sec=0.1, outfile="q.txt"):
     monitor = Process(target=monitor_qlen, args=(iface, interval_sec, outfile))
